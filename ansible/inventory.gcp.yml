@@ -1,0 +1,18 @@
+plugin: gcp_compute
+
+projects:
+  - CHANGE_ME
+
+regions:
+  - CHANGE_ME
+
+groups:
+  master: "'-master-' in name"
+  workers: "'-worker-' in name"
+
+filters: []
+
+auth_kind: serviceaccount
+
+service_account_file: ../credentials/credentials.json
+

@@ -1,0 +1,97 @@
+
+---
+- name: Install CKA stack
+  hosts: all
+
+  tasks:
+    - name: Setup systctl stuff
+      sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        sysctl_file: /etc/sysctl.d/K8S.conf
+        state: present
+        reload: no
+      loop:
+        - { key: "net.bridge.bridge-nf-call-ip6tables", value: "1"}
+        - { key: "net.bridge.bridge-nf-call-iptables", value: "1"}
+      register: control_sysctl
+
+    - name: Reload sysctl file
+      shell: "/sbin/sysctl --system"
+      when: control_sysctl is changed
+
+    - name: Load kernel module
+      modprobe:
+        name: br_netfilter
+        state: present
+
+    - name: Disable firewall
+      service:
+        name: ufw  
+        enabled: false
+        state: stopped
+
+    - name: Install dockerce
+      block:
+        - name: Install dockerce - Install deps
+          apt:
+            pkg:
+            - apt-transport-https
+            - ca-certificates
+            - curl
+            - gnupg-agent
+            - software-properties-common
+        
+        - name: Install dockerce - Add apt key
+          apt_key:
+            url: https://download.docker.com/linux/ubuntu/gpg
+
+        - name: Install dockerce - Add docker repo
+          apt_repository:
+            repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu xenial stable
+            state: present
+
+        - name: Install dockerce - Install docker binaries
+          apt:
+            update_cache: true
+            pkg:
+            - docker-ce
+            - docker-ce-cli
+            - containerd.io
+
+    - name: Install K8S stuff
+      block:
+        - name: Install K8S stuff - Add apt key
+          apt_key:
+            url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+
+        - name: Install K8S stuff - Add K8S repo
+          apt_repository:
+            repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+            state: present
+        
+        - name: Install K8S stuff - Install K8S binaries
+          apt:
+            update_cache: true
+            pkg:
+            - kubelet
+            - kubeadm
+            - kubectl
+
+    - name: Install etcd v3
+      shell: |
+        curl -L https://github.com/coreos/etcd/releases/download/{{ ETCD_VERSION }}/etcd-{{ ETCD_VERSION }}-linux-amd64.tar.gz -o etcd-{{ ETCD_VERSION }}-linux-amd64.tar.gz
+
+        tar xzvf etcd-{{ ETCD_VERSION }}-linux-amd64.tar.gz
+        rm etcd-{{ ETCD_VERSION }}-linux-amd64.tar.gz
+
+        cd etcd-{{ ETCD_VERSION }}-linux-amd64
+        sudo cp etcd /usr/local/bin/
+        sudo cp etcdctl /usr/local/bin/
+
+        rm -rf etcd-{{ ETCD_VERSION }}-linux-amd64
+
+        etcdctl --version
+      vars:
+        ETCD_VERSION: v3.3.1
+      when: inventory_hostname in groups['master']
